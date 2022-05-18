@@ -1,30 +1,21 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <asm/ptrace.h>
+#include <linux/socket.h>
 #include <linux/kallsyms.h>
-#include <linux/fs.h>
-#include <linux/buffer_head.h>
-#include <asm/segment.h>
-#include <asm/uaccess.h>
+
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Mamedov A.B.");
-MODULE_VERSION("0.01");
 
-//typedef int (*syscall_wrapper)(struct pt_regs *);
+typedef int (* syscall_wrapper)(struct pt_regs *);
 
-void **sys_call_table_addr = (void **)0xfffffffface00300;
+unsigned long sys_call_table_addr;
 
-int (*original_execve)(const char*, char *const[], char *const[]);
+#define SOCKETLOG "[EXECVELOG]"
 
-static int my_execve(const char* pathname, char *const argv[], char *const envp[])
-{
-    printk(KERN_INFO "%s\n", pathname);
-    return original_execve(pathname, argv, envp);
-}
 
-static int enable_page_rw(void *ptr)
-{
+int enable_page_rw(void *ptr){
     unsigned int level;
     pte_t *pte = lookup_address((unsigned long) ptr, &level);
     if(pte->pte &~_PAGE_RW){
@@ -33,41 +24,46 @@ static int enable_page_rw(void *ptr)
     return 0;
 }
 
-static int disable_page_rw(void *ptr)
-{
+int disable_page_rw(void *ptr){
     unsigned int level;
     pte_t *pte = lookup_address((unsigned long) ptr, &level);
     pte->pte = pte->pte &~_PAGE_RW;
     return 0;
 }
 
+syscall_wrapper original_execve;
 
-//syscall_wrapper original_exec;
+//asmlinkage int log_execve(int sockfd, const struct sockaddr *addr, int addrlen) {
+int log_execve(struct pt_regs *regs) {
+    printk(KERN_INFO SOCKETLOG "execve was called");
+    return (*original_execve)(regs);
+}
 
-static int __init proxyexec_init(void)
-{
-      enable_page_rw(sys_call_table_addr);
-      original_execve = sys_call_table_addr[__NR_execve];
-      if (!original_execve)
-      {
-          printk(KERN_INFO "NULL\n");
-      }
-      else {
-          printk(KERN_INFO "exec: %p\n", original_execve);
-          sys_call_table_addr[__NR_execve] = my_execve;
-          disable_page_rw(sys_call_table_addr);
-      }
+static int __init execve_log_init(void) {
+
+    printk(KERN_INFO SOCKETLOG "proxyexec module has been loaded\n");
+
+    sys_call_table_addr = 0xffffffffc03b7388;
+
+    printk(KERN_INFO SOCKETLOG "sys_call_table@%lx\n", sys_call_table_addr);
+
+    enable_page_rw((void *)sys_call_table_addr);
+    original_execve = ((syscall_wrapper *)sys_call_table_addr)[__NR_execve];
+    if (!original_execve) return -1;
+    ((syscall_wrapper *)sys_call_table_addr)[__NR_execve] = log_execve;
+    disable_page_rw((void *)sys_call_table_addr);
+
+    printk(KERN_INFO SOCKETLOG "original_execve = %p", original_execve);
     return 0;
 }
-//
-static void __exit proxyexec_exit(void)
-{
-    enable_page_rw(sys_call_table_addr);
-    sys_call_table_addr[__NR_execve] = original_execve;
-    disable_page_rw(sys_call_table_addr);
+
+static void __exit execve_log_exit(void) {
+    printk(KERN_INFO SOCKETLOG "proxyexec module has been unloaded\n");
+
+    enable_page_rw((void *)sys_call_table_addr);
+    ((syscall_wrapper *)sys_call_table_addr)[__NR_execve] = original_execve;
+    disable_page_rw((void *)sys_call_table_addr);
 }
 
-module_init(proxyexec_init);
-module_exit(proxyexec_exit);
-
-
+module_init(execve_log_init);
+module_exit(execve_log_exit);
