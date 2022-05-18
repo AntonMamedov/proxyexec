@@ -7,13 +7,13 @@
 
 #define KPROBE_PRE_HANDLER(fname) static int __kprobes fname(struct kprobe *p, struct pt_regs *regs)
 
-long unsigned int kln_addr = 0;
-unsigned long (*kln_pointer)(const char* name) = NULL;
+long unsigned int kallsyms_lookup_name_addr = 0;
+unsigned long (*kallsyms_lookup_name_pointer)(const char* name) = NULL;
 
 static struct kprobe kp0, kp1;
 
 KPROBE_PRE_HANDLER(handler_pre0) {
-    kln_addr = (--regs->ip);
+    kallsyms_lookup_name_addr = (--regs->ip);
 
     return 0;
 }
@@ -40,7 +40,7 @@ static int do_register_kprobe(struct kprobe* kp, char* symbol_name, void* handle
 }
 
 // this is the function that I have modified, as the name suggests it returns a pointer to the extracted kallsyms_lookup_name function
-kln_p get_kln_pointer(void) {
+kln_p get_kallsyms_lookup_name_ptr(void) {
     int status;
 
     status = do_register_kprobe(&kp0, "kallsyms_lookup_name", handler_pre0);
@@ -58,9 +58,9 @@ kln_p get_kln_pointer(void) {
     unregister_kprobe(&kp0);
     unregister_kprobe(&kp1);
 
-    pr_info("kallsyms_lookup_name address = 0x%lx\n", kln_addr);
+    pr_info("kallsyms_lookup_name address = 0x%lx\n", kallsyms_lookup_name_addr);
 
-    kln_pointer = (unsigned long (*)(const char* name)) kln_addr;
+    kallsyms_lookup_name_pointer = (unsigned long (*)(const char* name)) kallsyms_lookup_name_addr;
 
-    return kln_pointer;
+    return kallsyms_lookup_name_pointer;
 }
