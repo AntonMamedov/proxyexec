@@ -33,9 +33,8 @@ int disable_page_rw(void *ptr){
 
 syscall_wrapper original_execve;
 
-//asmlinkage int log_execve(int sockfd, const struct sockaddr *addr, int addrlen) {
 int log_execve(struct pt_regs *regs) {
-    printk(KERN_INFO SOCKETLOG "execve was called");
+    printk(KERN_INFO SOCKETLOG "execve was called (%s %p %p)",  (const char*)(regs->di), (void *)(regs->si), (void*)(regs->dx));
     return (*original_execve)(regs);
 }
 
