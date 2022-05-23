@@ -19,7 +19,10 @@ add_executable(proxyexec
         # add all *.h and *.c files here that # CLion should cover
         src/kln.c
         src/proxyexec.c
+        src/proxy_addr_store.c
         )
 
 # CLion IDE will find symbols from <linux/*>
 target_include_directories("proxyexec" PRIVATE ${KERNELHEADERS_INCLUDE_DIRS})
+
+add_executable(test test/main.c test/hash_table.c)
